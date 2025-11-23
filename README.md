@@ -1,14 +1,15 @@
 # StreamPS
 
-There is no way to stream from PS5 to Kick.com.
-This dashboard allows you to broadcast your Twitch stream to Kick.
+Currently, there is no native way to stream from PS5 to [Kick.com](https://kick.com). This dashboard allows you to broadcast your Twitch stream to Kick.
 
 1. Start a Twitch stream on PS5
 2. Run the dashboard on local (npm run dev), which starts a webpage at https://localhost:3000
 3. Enter your Twitch / Kick usernames, and Kick Stream Key (Channel > Stream URL & Key)
 4. It automatically starts your Kick Stream!
 
+
 ![panel](public/panel.png)
+
 
 ## Getting Started
 
@@ -24,7 +25,7 @@ yarn dev
 pnpm dev
 # or
 bun dev
-```
+
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
