@@ -1,10 +1,22 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# StreamPS
+
+There is no way to stream from PS5 to Kick.com.
+This dashboard allows you to broadcast your Twitch stream to Kick.
+
+1. Start a Twitch stream on PS5
+2. Run the dashboard on local (npm run dev), which starts a webpage at https://localhost:3000
+3. Enter your Twitch / Kick usernames, and Kick Stream Key (Channel > Stream URL & Key)
+4. It automatically starts your Kick Stream!
+
+![panel](public/panel.png)
 
 ## Getting Started
 
 First, run the development server:
 
 ```bash
+npm install
+
 npm run dev
 # or
 yarn dev
