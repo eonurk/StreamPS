@@ -10,6 +10,32 @@ Currently, there is no native way to stream from PS5 to [Kick.com](https://kick.
 
 ![panel](public/panel.png)
 
+## Desktop App (Electron)
+
+You can run StreamPS as a downloadable desktop app (Electron) so users do not need Node on their machines. FFmpeg must be on the system PATH.
+
+**Dev (hot reload UI):**
+```bash
+npm install
+npm run electron:dev
+```
+
+**Build installer:**
+```bash
+npm run electron:build
+```
+This runs `next build`, then packages the app. Outputs live in `dist/` (DMG for macOS, NSIS for Windows, AppImage for Linux).
+
+### Bundled FFmpeg (no install for users)
+
+Drop a static ffmpeg binary into the matching folder:
+- `resources/ffmpeg/mac/ffmpeg` (chmod +x)
+- `resources/ffmpeg/win/ffmpeg.exe`
+- `resources/ffmpeg/linux/ffmpeg` (chmod +x)
+
+When you run `npm run electron:build`, only the binary for the target OS is bundled (config uses `${os}`), so installers stay smaller. If a binary is missing, the app falls back to system ffmpeg on PATH.
+If you do not bundle ffmpeg, users must install it themselves.
+
 
 ## Getting Started
 

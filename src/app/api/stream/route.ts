@@ -3,10 +3,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { spawn, ChildProcess } from 'child_process';
 import { getTwitchStreamM3u8 } from '@/lib/twitch';
 
-// Global variable to store the active ffmpeg process
-// Note: In development, this might reset on file changes.
-let activeStreamProcess: ChildProcess | null = null;
-let activeStreamInfo: { twitchUser: string; startTime: number } | null = null;
+// Define the shape of our state
+interface StreamState {
+    process: ChildProcess | null;
+    info: { twitchUser: string; startTime: number } | null;
+    logs: string[];
+    stats: { fps: string; bitrate: string; speed: string; time: string } | null;
+}
+
+// Augment the global scope to include our state
+const globalForStream = globalThis as unknown as {
+    streamState: StreamState | undefined;
+};
+
+// Initialize if it doesn't exist (singleton pattern)
+if (!globalForStream.streamState) {
+    globalForStream.streamState = {
+        process: null,
+        info: null,
+        logs: [],
+        stats: null
+    };
+}
+
+// Use this reference for all operations
+const streamState = globalForStream.streamState!;
+
+// Ensure this handler always runs in a Node runtime (not Edge)
+export const runtime = 'nodejs';
+
+const ffmpegBinary = process.env.FFMPEG_PATH || 'ffmpeg';
 
 export async function POST(req: NextRequest) {
     try {
@@ -17,7 +43,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing twitchUsername or kickStreamKey' }, { status: 400 });
         }
 
-        if (activeStreamProcess) {
+        if (streamState.process) {
             return NextResponse.json({ error: 'A stream is already active' }, { status: 409 });
         }
 
@@ -27,14 +53,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Could not retrieve Twitch stream. Is the channel live?' }, { status: 404 });
         }
 
-        console.log(`Starting stream for ${twitchUsername} to Kick...`);
-        console.log(`Source: ${m3u8Url}`);
+        // Reset logs and stats for new session
+        streamState.logs = [`Starting stream for ${twitchUsername}...`, `Source: ${m3u8Url}`];
+        streamState.stats = null;
 
+        console.log(`Starting stream for ${twitchUsername} to Kick...`);
 
         // 2. Start FFmpeg
-        // Optimize for network stability:
-        // -re: Read input at native frame rate (crucial for live streams)
-        // -bufsize: Increase buffer size to handle network jitter
         const kickRtmpUrl = `rtmps://fa723fc1b171.global-contribute.live-video.net/app/${kickStreamKey}`;
 
         const ffmpegArgs = [
@@ -47,25 +72,52 @@ export async function POST(req: NextRequest) {
             kickRtmpUrl
         ];
 
-        const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+        const ffmpegProcess = spawn(ffmpegBinary, ffmpegArgs);
 
-        // Only log essential errors or start/stop info
         ffmpegProcess.stderr.on('data', (data) => {
-            const message = data.toString();
-            // Filter out normal frame progress logs to keep terminal clean
-            if (!message.includes('frame=') && !message.includes('fps=')) {
-                console.error(`FFmpeg: ${message}`);
+            const message = data.toString().trim();
+            if (!message) return;
+
+            // Update Logs (Keep last 100 lines)
+            streamState.logs.push(message);
+            if (streamState.logs.length > 100) {
+                streamState.logs.shift();
+            }
+
+            // Parse Stats
+            // Example: frame=  255 fps= 30 q=-1.0 size=    1234kB time=00:00:08.50 bitrate=1188.5kbits/s speed=   1x
+            if (message.includes('frame=')) {
+                const fpsMatch = message.match(/fps=\s*(\d+(\.\d+)?)/);
+                const bitrateMatch = message.match(/bitrate=\s*([\w\.\/]+)/);
+                const speedMatch = message.match(/speed=\s*([\w\.]+)/);
+                const timeMatch = message.match(/time=\s*([\d\:\.]+)/);
+
+                if (bitrateMatch) {
+                    streamState.stats = {
+                        fps: fpsMatch ? fpsMatch[1] : '0',
+                        bitrate: bitrateMatch[1],
+                        speed: speedMatch ? speedMatch[1] : '1x',
+                        time: timeMatch ? timeMatch[1] : '00:00:00'
+                    };
+                }
+            } else {
+                 console.error(`FFmpeg: ${message}`);
             }
         });
 
         ffmpegProcess.on('close', (code) => {
             console.log(`FFmpeg process exited with code ${code}`);
-            activeStreamProcess = null;
-            activeStreamInfo = null;
+            streamState.logs.push(`Process exited with code ${code}`);
+            // Only clear if it matches the current process (handle race conditions)
+            if (streamState.process === ffmpegProcess) {
+                streamState.process = null;
+                streamState.info = null;
+                streamState.stats = null;
+            }
         });
 
-        activeStreamProcess = ffmpegProcess;
-        activeStreamInfo = {
+        streamState.process = ffmpegProcess;
+        streamState.info = {
             twitchUser: twitchUsername,
             startTime: Date.now()
         };
@@ -79,10 +131,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-    if (activeStreamProcess) {
-        activeStreamProcess.kill('SIGKILL'); // Force kill
-        activeStreamProcess = null;
-        activeStreamInfo = null;
+    if (streamState.process) {
+        streamState.process.kill('SIGKILL'); // Force kill
+        streamState.process = null;
+        streamState.info = null;
+        streamState.stats = null;
         return NextResponse.json({ success: true, message: 'Stream stopped' });
     } else {
         return NextResponse.json({ error: 'No active stream found' }, { status: 404 });
@@ -91,7 +144,9 @@ export async function DELETE(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     return NextResponse.json({
-        active: !!activeStreamProcess,
-        info: activeStreamInfo
+        active: !!streamState.process,
+        info: streamState.info,
+        stats: streamState.stats,
+        logs: streamState.logs
     });
 }

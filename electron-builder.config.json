@@ -1,0 +1,37 @@
+{
+  "appId": "com.streamps.app",
+  "productName": "StreamPS",
+  "asar": true,
+  "files": [
+    "electron/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "resources/ffmpeg/${os}",
+      "to": "ffmpeg/${os}"
+    },
+    {
+      "from": ".next/standalone",
+      "to": "app-server"
+    },
+    {
+      "from": ".next/static",
+      "to": "app-server/.next/static"
+    },
+    {
+      "from": "public",
+      "to": "app-server/public"
+    }
+  ],
+  "mac": {
+    "target": "dmg",
+    "identity": null
+  },
+  "win": {
+    "target": "nsis"
+  },
+  "linux": {
+    "target": "AppImage"
+  }
+}
