@@ -8,7 +8,7 @@ Currently, there is no native way to stream from PS5 to [Kick.com](https://kick.
 4. It automatically starts your Kick Stream!
 
 
-![panel](public/panel.png)
+![App Dashboard Preview](/APP_DASHBOARD.png)
 
 ## Desktop App (Electron)
 
@@ -25,6 +25,17 @@ npm run electron:dev
 npm run electron:build
 ```
 This runs `next build`, then packages the app. Outputs live in `dist/` (DMG for macOS, NSIS for Windows, AppImage for Linux).
+
+### Publishing Releases to GitHub
+
+To publish the generated desktop application artifacts (DMG, EXE, AppImage) to GitHub Releases, use the provided script:
+
+```bash
+export GITHUB_TOKEN=your_github_token_here
+node scripts/publish-release.js
+```
+
+**Note:** Replace `your_github_token_here` with a GitHub Personal Access Token that has `repo` scope. The script will create a new release or update an existing one for the version specified in `scripts/publish-release.js` (or `package.json`).
 
 ### Bundled FFmpeg (no install for users)
 
