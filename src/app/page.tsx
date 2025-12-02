@@ -399,13 +399,15 @@ export default function Home() {
                                             className="w-full h-full"
                                         />
                                     ) : (
-                                        <div className="h-full flex flex-col items-center justify-center text-[#52525b] gap-3">
-                                            <div className="w-16 h-16 rounded-2xl bg-[#18181b] border border-[#27272a] flex items-center justify-center">
-                                                <LayoutTemplate size={32} />
-                                            </div>
+                                        <div className="h-full flex flex-col items-center justify-center text-[#52525b] gap-3 p-4">
+                                            <img
+                                                src="/APP_DASHBOARD.png"
+                                                alt="App Dashboard Preview"
+                                                className="max-w-full max-h-full object-contain"
+                                            />
                                             <div className="text-center">
-                                                <p className="text-sm font-medium text-[#ededed]">Stream Monitor</p>
-                                                <p className="text-xs mt-1">Enter a source channel to preview the feed</p>
+                                                <p className="text-sm font-medium text-[#ededed]">App Dashboard Preview</p>
+                                                <p className="text-xs mt-1">This is a preview of the application dashboard.</p>
                                             </div>
                                         </div>
                                     )}
