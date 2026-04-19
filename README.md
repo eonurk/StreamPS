@@ -8,7 +8,7 @@
 
 [![Download](https://img.shields.io/github/downloads/eonurk/StreamPS/total?style=flat-square&label=Downloads)](https://github.com/eonurk/StreamPS/releases/latest)
 [![Release](https://img.shields.io/github/v/release/eonurk/StreamPS?style=flat-square)](https://github.com/eonurk/StreamPS/releases/latest)
-[![License](https://img.shields.io/github/license/eonurk/StreamPS?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-PolyForm%20NC-blue?style=flat-square)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-ff5f5f?style=flat-square&logo=ko-fi)](https://ko-fi.com/onurr)
 
 </div>
@@ -81,4 +81,4 @@ If StreamPS saves you time, consider buying me a coffee ☕
 
 ## License
 
-MIT
+[PolyForm Noncommercial License 1.0.0](LICENSE) — free for personal and non-commercial use.
