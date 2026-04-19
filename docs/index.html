@@ -3,22 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StreamPS - The Modern Restreaming Console</title>
-    <meta name="description" content="Zero-latency restreaming from Twitch to Kick. Professional-grade CLI tools wrapped in a beautiful UI.">
+    <title>StreamPS — Relay Twitch to Kick</title>
+    <meta name="description" content="StreamPS relays your live Twitch stream to Kick with no re-encoding. PS5, Xbox, or OBS — one click and you're live on both platforms.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
             --bg: #050505;
             --surface: #0a0a0a;
-            --border: rgba(255, 255, 255, 0.1);
-            --border-hover: rgba(255, 255, 255, 0.2);
+            --surface-2: #111;
+            --border: rgba(255,255,255,0.08);
+            --border-hover: rgba(255,255,255,0.18);
             --text-primary: #ededed;
             --text-secondary: #a1a1aa;
-            --primary-glow: rgba(255, 255, 255, 0.15);
-            --accent: #fff;
+            --text-muted: #52525b;
+            --green: #22c55e;
+            --red: #ef4444;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -26,500 +28,497 @@
         body {
             background-color: var(--bg);
             color: var(--text-primary);
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, sans-serif;
             overflow-x: hidden;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
             -webkit-font-smoothing: antialiased;
         }
 
-        /* Background Effects */
+        /* Background */
         .bg-grid {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background-image: linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
-                              linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
-            background-size: 50px 50px;
-            z-index: -2;
-            pointer-events: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-image:
+                linear-gradient(to right, rgba(255,255,255,0.018) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.018) 1px, transparent 1px);
+            background-size: 48px 48px;
+            z-index: -2; pointer-events: none;
         }
-        
-        .bg-spotlight {
-            position: fixed;
-            top: -20%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 140vw;
-            height: 100vh;
-            background: radial-gradient(circle at center, rgba(255,255,255,0.08) 0%, transparent 50%);
-            z-index: -1;
-            pointer-events: none;
+        .bg-glow {
+            position: fixed; top: -30%; left: 50%; transform: translateX(-50%);
+            width: 120vw; height: 80vh;
+            background: radial-gradient(ellipse at center, rgba(255,255,255,0.06) 0%, transparent 60%);
+            z-index: -1; pointer-events: none;
         }
 
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 0 24px;
-            width: 100%;
-        }
+        .container { max-width: 1080px; margin: 0 auto; padding: 0 24px; width: 100%; }
 
         /* Animations */
         @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
-        
-        .animate-fade-up {
-            animation: fadeUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-            opacity: 0;
-        }
-        .delay-100 { animation-delay: 0.1s; }
-        .delay-200 { animation-delay: 0.2s; }
-        .delay-300 { animation-delay: 0.3s; }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+        .fade-up { animation: fadeUp 0.7s cubic-bezier(0.2,0.8,0.2,1) forwards; opacity: 0; }
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.22s; }
+        .delay-3 { animation-delay: 0.36s; }
+        .delay-4 { animation-delay: 0.5s; }
 
-        /* Header */
-        header {
-            padding: 20px 0;
+        /* Nav */
+        nav {
+            padding: 18px 0;
             border-bottom: 1px solid var(--border);
-            background: rgba(5, 5, 5, 0.6);
+            background: rgba(5,5,5,0.7);
             backdrop-filter: blur(16px);
-            position: sticky;
-            top: 0;
-            z-index: 50;
+            position: sticky; top: 0; z-index: 50;
         }
-        .nav {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
+        .nav-inner { display: flex; align-items: center; justify-content: space-between; }
         .logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 600;
-            font-size: 1rem;
-            color: var(--text-primary);
-            text-decoration: none;
-            letter-spacing: -0.02em;
+            display: flex; align-items: center; gap: 10px;
+            font-weight: 700; font-size: 0.9375rem; letter-spacing: -0.02em;
+            color: var(--text-primary); text-decoration: none;
         }
-        .logo-icon {
-            width: 24px;
-            height: 24px;
-            background: var(--text-primary);
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--bg);
+        .logo-mark {
+            width: 28px; height: 28px; background: white; border-radius: 7px;
+            display: flex; align-items: center; justify-content: center; color: #000;
+            flex-shrink: 0;
         }
-
+        .nav-links { display: flex; align-items: center; gap: 6px; }
         .nav-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.875rem;
-            font-weight: 500;
-            margin-left: 24px;
-            transition: color 0.2s;
+            color: var(--text-secondary); text-decoration: none;
+            font-size: 0.875rem; font-weight: 500; padding: 6px 12px;
+            border-radius: 6px; transition: all 0.15s;
         }
-        .nav-links a:hover { color: var(--text-primary); }
+        .nav-links a:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+        .nav-cta {
+            background: white !important; color: #000 !important;
+            font-weight: 600 !important; padding: 7px 14px !important;
+        }
+        .nav-cta:hover { opacity: 0.9; background: white !important; }
 
         /* Hero */
-        .hero {
-            padding: 140px 0 100px;
-            text-align: center;
-            position: relative;
+        .hero { padding: 120px 0 80px; text-align: center; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 5px 14px; border-radius: 99px;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.75rem; font-weight: 500; color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+        .badge-dot {
+            width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+            animation: pulse 2s infinite;
         }
         .hero h1 {
-            font-size: clamp(2.5rem, 5vw, 4.5rem);
-            font-weight: 800;
-            letter-spacing: -0.04em;
-            line-height: 1.1;
-            margin-bottom: 24px;
-            color: white;
-            text-shadow: 0 0 40px rgba(255,255,255,0.1);
+            font-size: clamp(2.6rem, 5.5vw, 4.75rem);
+            font-weight: 800; letter-spacing: -0.045em; line-height: 1.08;
+            color: white; margin-bottom: 24px;
         }
+        .hero h1 span { color: var(--text-secondary); }
         .hero p {
-            font-size: 1.125rem;
-            color: var(--text-secondary);
-            max-width: 560px;
-            margin: 0 auto 40px;
-            line-height: 1.6;
+            font-size: 1.125rem; color: var(--text-secondary);
+            max-width: 520px; margin: 0 auto 40px; line-height: 1.65;
         }
-
-        .btn-group {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            align-items: center;
-        }
-
+        .btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
         .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 20px;
-            border-radius: 8px;
-            font-size: 0.9375rem;
-            font-weight: 500;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            border: 1px solid transparent;
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 11px 20px; border-radius: 8px; font-size: 0.9375rem;
+            font-weight: 500; text-decoration: none; transition: all 0.18s;
+            border: 1px solid transparent; cursor: pointer;
         }
         .btn-primary {
-            background: var(--text-primary);
-            color: var(--bg);
-            box-shadow: 0 0 20px rgba(255,255,255,0.15);
+            background: white; color: #000;
+            box-shadow: 0 0 24px rgba(255,255,255,0.12);
         }
-        .btn-primary:hover {
-            background: #fff;
-            transform: translateY(-1px);
-            box-shadow: 0 0 30px rgba(255,255,255,0.25);
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 36px rgba(255,255,255,0.2); }
+        .btn-ghost {
+            background: rgba(255,255,255,0.04); border-color: var(--border); color: var(--text-primary);
         }
-        .btn-secondary {
-            background: rgba(255,255,255,0.03);
-            border-color: var(--border);
-            color: var(--text-primary);
+        .btn-ghost:hover { background: rgba(255,255,255,0.08); border-color: var(--border-hover); }
+        .btn-kofi { color: #ff5f5f !important; border-color: rgba(255,95,95,0.2) !important; }
+
+        /* Screenshot */
+        .screenshot-wrap {
+            margin-top: 64px;
+            border-radius: 14px; border: 1px solid var(--border);
+            background: rgba(10,10,10,0.6); padding: 6px;
+            box-shadow: 0 40px 120px -20px rgba(0,0,0,0.7);
         }
-        .btn-secondary:hover {
-            background: rgba(255,255,255,0.06);
-            border-color: var(--text-secondary);
+        .screenshot-wrap img {
+            width: 100%; border-radius: 10px; display: block;
         }
 
-        /* Dashboard Preview */
-        .preview-container {
-            margin-top: 60px;
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            background: rgba(10, 10, 10, 0.5);
-            padding: 8px;
-            box-shadow: 0 0 100px -20px rgba(0,0,0,0.5);
-            animation: fadeUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.4s forwards;
-            opacity: 0;
-            transform: translateY(20px);
+        /* How it works */
+        .section { padding: 100px 0; }
+        .section-label {
+            font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--text-muted); margin-bottom: 16px;
         }
-        .preview-img {
-            width: 100%;
-            height: auto;
-            border-radius: 8px;
-            display: block;
-            /* Placeholder gradient if image missing */
-            background: linear-gradient(to bottom right, #1a1a1a, #0a0a0a);
-            aspect-ratio: 16/10;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--border);
-            font-size: 0.875rem;
+        .section-title {
+            font-size: clamp(1.75rem, 3vw, 2.5rem);
+            font-weight: 700; letter-spacing: -0.035em; margin-bottom: 16px;
         }
+        .section-sub { color: var(--text-secondary); max-width: 480px; line-height: 1.6; }
+
+        .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 2px; margin-top: 56px; }
+        .step {
+            background: var(--surface); padding: 32px;
+            border: 1px solid var(--border); position: relative; overflow: hidden;
+        }
+        .step:first-child { border-radius: 12px 0 0 12px; }
+        .step:last-child  { border-radius: 0 12px 12px 0; }
+        .step-num {
+            font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+            color: var(--text-muted); text-transform: uppercase; margin-bottom: 20px;
+        }
+        .step-icon {
+            width: 42px; height: 42px; border-radius: 10px;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-primary); margin-bottom: 20px;
+        }
+        .step h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+        .step p { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.6; }
 
         /* Features */
-        .features {
-            padding: 100px 0;
+        .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1px; margin-top: 56px;
+            border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
         }
-        .feature-card {
-            background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%);
-            border: 1px solid var(--border);
-            padding: 32px;
-            border-radius: 12px;
-            transition: all 0.3s ease;
+        .feature {
+            background: var(--surface); padding: 28px 32px;
+            transition: background 0.2s;
         }
-        .feature-card:hover {
-            border-color: var(--border-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
-        }
+        .feature:hover { background: var(--surface-2); }
         .feature-icon {
-            width: 40px;
-            height: 40px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-            color: var(--text-primary);
+            width: 38px; height: 38px; border-radius: 9px;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-primary); margin-bottom: 18px;
         }
-        .feature-title {
-            font-size: 1.125rem;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: var(--text-primary);
-        }
-        .feature-text {
-            color: var(--text-secondary);
-            font-size: 0.9375rem;
-            line-height: 1.6;
-        }
+        .feature h3 { font-size: 0.9375rem; font-weight: 600; margin-bottom: 7px; }
+        .feature p { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.6; }
 
-        /* Downloads Section */
-        .downloads-section {
-            border-top: 1px solid var(--border);
-            padding: 100px 0;
+        /* Changelog */
+        .changelog { padding: 100px 0; border-top: 1px solid var(--border); }
+        .changelog-grid { display: grid; grid-template-columns: 200px 1fr; gap: 48px; margin-top: 56px; }
+        .version-tag {
+            display: inline-block; padding: 4px 10px; border-radius: 6px;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+            font-size: 0.8125rem; font-weight: 600; color: var(--text-primary);
+            font-family: monospace;
         }
-        .section-header {
-            text-align: center;
-            margin-bottom: 60px;
+        .version-date { font-size: 0.8125rem; color: var(--text-muted); margin-top: 6px; }
+        .changelog-items { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+        .changelog-items li {
+            display: flex; align-items: flex-start; gap: 10px;
+            font-size: 0.9375rem; color: var(--text-secondary); line-height: 1.5;
         }
-        .section-header h2 {
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 16px;
-            letter-spacing: -0.03em;
+        .changelog-items li::before {
+            content: ''; width: 6px; height: 6px; border-radius: 50%;
+            background: var(--text-muted); flex-shrink: 0; margin-top: 8px;
         }
-        .section-header p {
-            color: var(--text-secondary);
-        }
+        .changelog-items li strong { color: var(--text-primary); }
 
-        .os-grid {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
+        /* Download */
+        .download-section { padding: 100px 0; border-top: 1px solid var(--border); }
+        .os-grid { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 56px; }
         .os-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            padding: 24px;
-            border-radius: 12px;
-            width: 260px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            transition: all 0.2s;
-            position: relative;
-            overflow: hidden;
+            background: var(--surface); border: 1px solid var(--border);
+            padding: 24px; border-radius: 12px; width: 250px;
+            display: flex; flex-direction: column; gap: 16px;
+            transition: border-color 0.2s;
         }
-        .os-card:hover {
-            border-color: var(--text-secondary);
+        .os-card:hover { border-color: var(--border-hover); }
+        .os-card-header { display: flex; align-items: center; gap: 12px; }
+        .os-icon {
+            width: 40px; height: 40px; background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border); border-radius: 9px;
+            display: flex; align-items: center; justify-content: center;
         }
-        .os-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
+        .os-name { font-weight: 600; font-size: 0.9375rem; }
+        .os-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+        .os-note { font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; }
+        .dl-btn {
+            display: block; text-align: center;
+            background: white; color: #000;
+            padding: 10px; border-radius: 7px;
+            font-size: 0.875rem; font-weight: 600;
+            text-decoration: none; margin-top: auto;
+            transition: opacity 0.15s;
         }
-        .os-icon-wrapper {
-            width: 40px;
-            height: 40px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .os-name {
-            font-weight: 600;
-            font-size: 1rem;
-        }
-        .os-meta {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-        }
-        .download-btn {
-            margin-top: auto;
-            background: var(--text-primary);
-            color: var(--bg);
-            text-align: center;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            text-decoration: none;
-            transition: opacity 0.2s;
-        }
-        .download-btn:hover {
-            opacity: 0.9;
+        .dl-btn:hover { opacity: 0.88; }
+        .dl-btn-ghost {
+            background: transparent !important; color: var(--text-secondary) !important;
+            border: 1px solid var(--border) !important;
         }
 
         /* Footer */
         footer {
-            padding: 60px 0;
-            border-top: 1px solid var(--border);
-            text-align: center;
+            padding: 48px 0; border-top: 1px solid var(--border);
         }
-        .footer-content {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
+        .footer-inner {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 20px;
         }
-        .copyright {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
+        .footer-copy { font-size: 0.8125rem; color: var(--text-muted); }
+        .footer-links { display: flex; align-items: center; gap: 16px; }
+        .footer-links a {
+            color: var(--text-muted); transition: color 0.15s;
+            display: flex; align-items: center;
         }
-        .social-link {
-            color: var(--text-secondary);
-            transition: color 0.2s;
-        }
-        .social-link:hover {
-            color: var(--text-primary);
-        }
+        .footer-links a:hover { color: var(--text-primary); }
+        .footer-kofi { color: #ff5f5f !important; }
 
         @media (max-width: 768px) {
-            .hero h1 { font-size: 3rem; }
-            .nav-links { display: none; }
-            .os-card { width: 100%; }
+            .hero { padding: 80px 0 60px; }
+            .hero h1 { font-size: 2.6rem; }
+            .nav-links .hide-mobile { display: none; }
+            .steps { grid-template-columns: 1fr; }
+            .step:first-child { border-radius: 12px 12px 0 0; }
+            .step:last-child  { border-radius: 0 0 12px 12px; }
+            .changelog-grid { grid-template-columns: 1fr; gap: 24px; }
+            .os-card { width: 100%; max-width: 340px; }
+            .footer-inner { flex-direction: column; align-items: flex-start; }
         }
     </style>
 </head>
 <body>
-
     <div class="bg-grid"></div>
-    <div class="bg-spotlight"></div>
+    <div class="bg-glow"></div>
 
-    <header>
-        <div class="container nav">
+    <!-- Nav -->
+    <nav>
+        <div class="container nav-inner">
             <a href="#" class="logo">
-                <div class="logo-icon">
-                    <i data-lucide="zap" size="14"></i>
-                </div>
+                <div class="logo-mark"><i data-lucide="zap" width="14" height="14"></i></div>
                 StreamPS
             </a>
-            <nav class="nav-links">
-                <a href="#features">Features</a>
+            <div class="nav-links">
+                <a href="#how-it-works" class="hide-mobile">How it works</a>
+                <a href="#features" class="hide-mobile">Features</a>
                 <a href="#download">Download</a>
-                <a href="https://github.com/eonurk/StreamPS" target="_blank">GitHub</a>
-            </nav>
+                <a href="https://github.com/eonurk/StreamPS" target="_blank" class="hide-mobile">GitHub</a>
+                <a href="https://ko-fi.com/onurr" target="_blank" class="nav-cta btn">Support ☕</a>
+            </div>
         </div>
-    </header>
+    </nav>
 
+    <!-- Hero -->
     <section class="hero">
         <div class="container">
-            <div class="animate-fade-up">
-                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-zinc-400 mb-8">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    v0.2.0 Now Available
-                </div>
-                <h1>Stream Anywhere.<br>Control Everything.</h1>
-                <p>The ultimate relay console for Twitch and Kick. Zero latency, real-time matrix logs, and granular performance stats—all in a beautiful, native app.</p>
-                <div class="btn-group">
-                    <a href="#download" class="btn btn-primary">
-                        <i data-lucide="download" width="18"></i> Download Now
-                    </a>
-                    <a href="https://github.com/eonurk/StreamPS" class="btn btn-secondary" target="_blank">
-                        <i data-lucide="github" width="18"></i> Star on GitHub
-                    </a>
-                    <a href="https://ko-fi.com/onurr" class="btn btn-secondary" target="_blank" style="color: #ff5f5f; border-color: rgba(255,95,95,0.25);">
-                        <i data-lucide="coffee" width="18"></i> Support
-                    </a>
+            <div class="fade-up">
+                <div class="badge">
+                    <span class="badge-dot"></span>
+                    v0.2.0 — Now with auto-reconnect &amp; system tray
                 </div>
             </div>
-
-            <div class="preview-container">
-                <img src="assets/APP_DASHBOARD.png" alt="App Dashboard" class="preview-img" style="background: none; padding: 0; display: block;" />
+            <h1 class="fade-up delay-1">Go Live on Twitch.<br><span>Stream to Kick.</span></h1>
+            <p class="fade-up delay-2">PS5, Xbox, and OBS users can't stream directly to Kick. StreamPS relays your live Twitch stream to Kick in real time — no re-encoding, no extra hardware.</p>
+            <div class="btn-row fade-up delay-3">
+                <a href="#download" class="btn btn-primary">
+                    <i data-lucide="download" width="16" height="16"></i> Download Free
+                </a>
+                <a href="https://github.com/eonurk/StreamPS" class="btn btn-ghost" target="_blank">
+                    <i data-lucide="github" width="16" height="16"></i> Star on GitHub
+                </a>
+                <a href="https://ko-fi.com/onurr" class="btn btn-ghost btn-kofi" target="_blank">
+                    <i data-lucide="coffee" width="16" height="16"></i> Support
+                </a>
+            </div>
+            <div class="screenshot-wrap fade-up delay-4">
+                <img src="assets/APP_DASHBOARD.png" alt="StreamPS dashboard" />
             </div>
         </div>
     </section>
 
-    <div class="container" id="features">
-        <div class="features">
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i data-lucide="activity"></i>
+    <!-- How it works -->
+    <section class="section" id="how-it-works">
+        <div class="container">
+            <div class="section-label">How it works</div>
+            <h2 class="section-title">Three steps to both platforms</h2>
+            <p class="section-sub">StreamPS sits between Twitch's HLS output and Kick's RTMP ingest. FFmpeg does the heavy lifting — we just make it easy.</p>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">Step 01</div>
+                    <div class="step-icon"><i data-lucide="play" width="18" height="18"></i></div>
+                    <h3>Go live on Twitch</h3>
+                    <p>Start your stream from a PS5, Xbox, or OBS as you normally would. StreamPS works with any Twitch channel.</p>
                 </div>
-                <h3 class="feature-title">Precision Analytics</h3>
-                <p class="feature-text">Monitor your stream's heartbeat with real-time FPS, bitrate, and encoding speed metrics. Detect instability before your viewers do.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i data-lucide="terminal"></i>
+                <div class="step">
+                    <div class="step-num">Step 02</div>
+                    <div class="step-icon"><i data-lucide="key" width="18" height="18"></i></div>
+                    <h3>Enter your Kick key</h3>
+                    <p>Paste your Kick stream key (Settings → Stream Key). StreamPS auto-detects the right RTMP server for your region.</p>
                 </div>
-                <h3 class="feature-title">Matrix Terminal</h3>
-                <p class="feature-text">No more black box. View raw FFmpeg logs in a dedicated developer console to debug connection issues instantly.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i data-lucide="cpu"></i>
+                <div class="step">
+                    <div class="step-num">Step 03</div>
+                    <div class="step-icon"><i data-lucide="zap" width="18" height="18"></i></div>
+                    <h3>Click Start Relay</h3>
+                    <p>StreamPS pulls from Twitch's HLS feed and pushes straight to Kick. No re-encoding — your CPU barely notices.</p>
                 </div>
-                <h3 class="feature-title">Native Performance</h3>
-                <p class="feature-text">Built with Electron and Next.js, optimized for Apple Silicon and modern hardware. Low CPU footprint, high throughput.</p>
             </div>
         </div>
-    </div>
+    </section>
 
-    <section id="download" class="downloads-section">
+    <!-- Features -->
+    <section class="section" id="features" style="padding-top:0;">
         <div class="container">
-            <div class="section-header">
-                <h2>Ready to relay?</h2>
-                <p>Download the latest version for your operating system.</p>
+            <div class="section-label">Features</div>
+            <h2 class="section-title">Everything you need, nothing you don't</h2>
+            <p class="section-sub">Built for streamers who want reliability over complexity.</p>
+            <div class="features-grid">
+                <div class="feature">
+                    <div class="feature-icon"><i data-lucide="refresh-cw" width="17" height="17"></i></div>
+                    <h3>Auto-reconnect</h3>
+                    <p>If the relay drops mid-stream, StreamPS automatically retries up to 5 times — no need to babysit it.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon"><i data-lucide="layers" width="17" height="17"></i></div>
+                    <h3>Unified chat</h3>
+                    <p>Twitch and Kick chat merged into a single real-time feed. Or view them side-by-side — your call.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon"><i data-lucide="activity" width="17" height="17"></i></div>
+                    <h3>Live stats</h3>
+                    <p>Real-time FPS, bitrate, encoding speed, and viewer counts for both platforms shown in the header.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon"><i data-lucide="terminal" width="17" height="17"></i></div>
+                    <h3>FFmpeg terminal</h3>
+                    <p>Every log line timestamped and surfaced in a live terminal tab. Debug connection drops instantly.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon"><i data-lucide="monitor" width="17" height="17"></i></div>
+                    <h3>System tray</h3>
+                    <p>Close the window without killing the relay. StreamPS keeps running silently in the background.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon"><i data-lucide="wifi" width="17" height="17"></i></div>
+                    <h3>Smart RTMP routing</h3>
+                    <p>Detects your Kick region automatically from your stream key (US East, US West, EU West).</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon"><i data-lucide="sliders" width="17" height="17"></i></div>
+                    <h3>Quality presets</h3>
+                    <p>Choose Auto, Source, 720p60, 720p, or 480p. Auto picks the best quality Twitch is broadcasting.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon"><i data-lucide="edit-2" width="17" height="17"></i></div>
+                    <h3>Title updater</h3>
+                    <p>Update your Kick stream title directly from the app, without opening a browser.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Changelog -->
+    <section class="changelog" id="changelog">
+        <div class="container">
+            <div class="section-label">Changelog</div>
+            <h2 class="section-title">What's new</h2>
+            <div class="changelog-grid">
+                <div>
+                    <div class="version-tag">v0.2.0</div>
+                    <div class="version-date">April 2026</div>
+                </div>
+                <ul class="changelog-items">
+                    <li><strong>Fixed:</strong> Input fields were not interactive in the packaged app</li>
+                    <li><strong>Auto-reconnect:</strong> Relay retries automatically on unexpected drops (up to 5 attempts)</li>
+                    <li><strong>System tray:</strong> Closing the window no longer kills the relay</li>
+                    <li><strong>Loading screen:</strong> Dark-themed startup screen instead of a blank white window</li>
+                    <li><strong>Kick viewer count:</strong> Now shown in the header alongside Twitch viewers</li>
+                    <li><strong>Log timestamps:</strong> Each terminal log line shows the actual time it was recorded</li>
+                    <li><strong>Kick sign-in:</strong> "Open Kick Window" button bypasses iframe CSRF and Google OAuth restrictions</li>
+                    <li><strong>Graceful shutdown:</strong> Stop relay now sends SIGTERM before force-killing FFmpeg</li>
+                    <li><strong>macOS:</strong> Shipped as .dmg installer instead of a raw .zip</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download -->
+    <section class="download-section" id="download">
+        <div class="container">
+            <div style="text-align:center;">
+                <div class="section-label" style="justify-content:center;display:flex;">Download</div>
+                <h2 class="section-title">Get StreamPS</h2>
+                <p style="color:var(--text-secondary);margin-top:8px;">Free for personal and non-commercial use.</p>
             </div>
             <div class="os-grid">
-                <!-- macOS -->
                 <div class="os-card">
-                    <div class="os-header">
-                        <div class="os-icon-wrapper">
-                            <i data-lucide="apple"></i>
-                        </div>
+                    <div class="os-card-header">
+                        <div class="os-icon"><i data-lucide="monitor" width="18" height="18"></i></div>
                         <div>
                             <div class="os-name">macOS</div>
-                            <div class="os-meta">Apple Silicon (M1/M2/M3)</div>
+                            <div class="os-sub">Apple Silicon · v0.2.0</div>
                         </div>
                     </div>
-                    <a href="https://github.com/eonurk/StreamPS/releases/latest/download/StreamPS-0.2.0-arm64.dmg" class="download-btn">
+                    <p class="os-note">Right-click → Open on first launch to bypass Gatekeeper (app is unsigned).</p>
+                    <a href="https://github.com/eonurk/StreamPS/releases/latest/download/StreamPS-0.2.0-arm64.dmg" class="dl-btn">
                         Download .dmg
                     </a>
                 </div>
 
-                <!-- Windows -->
                 <div class="os-card">
-                    <div class="os-header">
-                        <div class="os-icon-wrapper">
-                            <i data-lucide="monitor"></i>
-                        </div>
+                    <div class="os-card-header">
+                        <div class="os-icon"><i data-lucide="square" width="18" height="18"></i></div>
                         <div>
                             <div class="os-name">Windows</div>
-                            <div class="os-meta">10/11 (x64)</div>
+                            <div class="os-sub">x64 · v0.1.0</div>
                         </div>
                     </div>
-                    <a href="https://github.com/eonurk/StreamPS/releases/latest/download/StreamPS-Setup-0.1.0.exe" class="download-btn">
+                    <p class="os-note">NSIS installer with desktop shortcut. Windows 10/11.</p>
+                    <a href="https://github.com/eonurk/StreamPS/releases/download/v0.1.0/StreamPS-Setup-0.1.0.exe" class="dl-btn">
                         Download .exe
                     </a>
                 </div>
 
-                <!-- Linux -->
                 <div class="os-card">
-                    <div class="os-header">
-                        <div class="os-icon-wrapper">
-                            <i data-lucide="server"></i>
-                        </div>
+                    <div class="os-card-header">
+                        <div class="os-icon"><i data-lucide="circle" width="18" height="18"></i></div>
                         <div>
                             <div class="os-name">Linux</div>
-                            <div class="os-meta">AppImage (x64)</div>
+                            <div class="os-sub">x64 · v0.1.0</div>
                         </div>
                     </div>
-                    <a href="https://github.com/eonurk/StreamPS/releases/latest/download/StreamPS-0.1.0.AppImage" class="download-btn">
+                    <p class="os-note">AppImage — make executable and run. No install needed.</p>
+                    <a href="https://github.com/eonurk/StreamPS/releases/download/v0.1.0/StreamPS-0.1.0.AppImage" class="dl-btn">
                         Download .AppImage
                     </a>
                 </div>
             </div>
+            <p style="text-align:center;margin-top:28px;font-size:0.8125rem;color:var(--text-muted);">
+                FFmpeg is bundled — no separate install needed. &nbsp;·&nbsp;
+                <a href="https://github.com/eonurk/StreamPS/releases" target="_blank" style="color:var(--text-secondary);text-decoration:none;">All releases →</a>
+            </p>
         </div>
     </section>
 
+    <!-- Footer -->
     <footer>
-        <div class="container footer-content">
-            <a href="#" class="logo" style="opacity: 0.8">
-                <div class="logo-icon" style="width: 20px; height: 20px;">
-                    <i data-lucide="zap" size="12"></i>
-                </div>
-                StreamPS
-            </a>
-            <p class="copyright">&copy; 2024 StreamPS. Free for personal &amp; non-commercial use.</p>
-            <div style="display:flex;gap:16px;align-items:center;">
-                <a href="https://github.com/eonurk/StreamPS" class="social-link" target="_blank">
-                    <i data-lucide="github"></i>
+        <div class="container footer-inner">
+            <div>
+                <a href="#" class="logo" style="margin-bottom:8px;display:inline-flex;">
+                    <div class="logo-mark" style="width:22px;height:22px;">
+                        <i data-lucide="zap" width="11" height="11"></i>
+                    </div>
+                    StreamPS
                 </a>
-                <a href="https://ko-fi.com/onurr" class="social-link" target="_blank" style="color:#ff5f5f;">
-                    <i data-lucide="coffee"></i>
+                <p class="footer-copy">© 2026 StreamPS · Free for personal &amp; non-commercial use</p>
+            </div>
+            <div class="footer-links">
+                <a href="https://github.com/eonurk/StreamPS" target="_blank" title="GitHub">
+                    <i data-lucide="github" width="18" height="18"></i>
+                </a>
+                <a href="https://ko-fi.com/onurr" target="_blank" title="Support on Ko-fi" class="footer-kofi">
+                    <i data-lucide="coffee" width="18" height="18"></i>
                 </a>
             </div>
         </div>
     </footer>
 
-    <script>
-        lucide.createIcons();
-    </script>
+    <script>lucide.createIcons();</script>
 </body>
 </html>
