@@ -140,3 +140,37 @@ export async function getTwitchStreamM3u8(channelName: string, quality: string =
     return null;
   }
 }
+
+export async function getTwitchStreamViewers(channelName: string): Promise<number | null> {
+  try {
+    const gqlQuery = {
+      query: `query StreamInfo($login: String!) {
+        user(login: $login) {
+          stream {
+            viewersCount
+          }
+        }
+      }`,
+      variables: {
+        login: channelName
+      }
+    };
+
+    const response = await fetch("https://gql.twitch.tv/gql", {
+      method: "POST",
+      headers: {
+        "Client-Id": "kimne78kx3ncx6brgo4mv6wki5h1ko",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(gqlQuery)
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    return data.data?.user?.stream?.viewersCount ?? null;
+  } catch (error) {
+    console.error("[Twitch] Error fetching viewer count:", error);
+    return null;
+  }
+}

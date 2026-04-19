@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>StreamPS</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      background: #09090b;
+      color: #ededed;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: drag;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    .logo {
+      width: 52px;
+      height: 52px;
+      background: white;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 60px rgba(255,255,255,0.12);
+    }
+    .logo svg { width: 26px; height: 26px; }
+    .name { font-size: 18px; font-weight: 700; letter-spacing: -0.4px; }
+    .subtitle {
+      font-size: 10px;
+      color: #52525b;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      margin-top: -14px;
+    }
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #27272a;
+      border-top-color: #a1a1aa;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M13 2L3.5 13.5H10.5L9 22L20.5 10H13.5L13 2Z"
+              fill="black" stroke="black" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div>
+      <div class="name">StreamPS</div>
+      <div class="subtitle">Relay Console</div>
+    </div>
+    <div class="spinner"></div>
+  </div>
+</body>
+</html>

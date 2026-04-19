@@ -1,22 +1,40 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Twitch, Key, Activity, Clock, Play, Square, AlertCircle, Monitor, Radio, Zap, LayoutTemplate, MessageSquare, Cast, Terminal, Wifi, Cpu } from 'lucide-react';
+
+declare global {
+    interface Window {
+        electronAPI?: {
+            setStreamStatus: (active: boolean) => void;
+            openExternal: (url: string) => void;
+            platform: string;
+            isElectron: boolean;
+        };
+    }
+}
+import { Twitch, Key, Activity, Clock, Play, Square, AlertCircle, Monitor, Radio, Zap, LayoutTemplate, MessageSquare, Cast, Terminal, Wifi, Cpu, Users, Layers } from 'lucide-react';
+import UnifiedChat from '@/components/UnifiedChat';
 
 export default function Home() {
     const [twitchUsername, setTwitchUsername] = useState('');
     const [kickUsername, setKickUsername] = useState('');
     const [kickStreamKey, setKickStreamKey] = useState('');
+    const [kickRtmpUrl, setKickRtmpUrl] = useState('');
+    const [kickChatroomId, setKickChatroomId] = useState('');
+    const [kickTitle, setKickTitle] = useState('');
+    const [kickToken, setKickToken] = useState('');
     const [isStreaming, setIsStreaming] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isUpdatingInfo, setIsUpdatingInfo] = useState(false);
     const [streamStartTime, setStreamStartTime] = useState<number | null>(null);
     const [elapsedTime, setElapsedTime] = useState('00:00:00');
-    const [activeTab, setActiveTab] = useState<'twitch' | 'kick' | 'split' | 'preview' | 'terminal'>('twitch');
+    const [activeTab, setActiveTab] = useState<'twitch' | 'kick' | 'split' | 'preview' | 'terminal' | 'unified'>('twitch');
     const [quality, setQuality] = useState('auto');
     const [parentHost, setParentHost] = useState('localhost');
     
     const [stats, setStats] = useState<{ fps: string; bitrate: string; speed: string } | null>(null);
+    const [viewers, setViewers] = useState<number | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
     const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -25,9 +43,22 @@ export default function Home() {
         const savedUser = localStorage.getItem('twitchUsername');
         const savedKickUser = localStorage.getItem('kickUsername');
         const savedKey = localStorage.getItem('kickStreamKey');
+        const savedRtmpUrl = localStorage.getItem('kickRtmpUrl');
+        const savedChatroomId = localStorage.getItem('kickChatroomId');
+        const savedToken = localStorage.getItem('kickToken');
+        
         if (savedUser) setTwitchUsername(savedUser);
         if (savedKickUser) setKickUsername(savedKickUser);
         if (savedKey) setKickStreamKey(savedKey);
+        if (savedChatroomId) setKickChatroomId(savedChatroomId);
+        if (savedToken) setKickToken(savedToken);
+        
+        // Fix: specific check to clear the old hardcoded default if it was saved
+        // This allows the backend auto-detection to take over
+        const oldDefault = 'rtmps://fa723fc1b171.global-contribute.live-video.net/app';
+        if (savedRtmpUrl && savedRtmpUrl !== oldDefault) {
+            setKickRtmpUrl(savedRtmpUrl);
+        }
     }, []);
 
     // Twitch embed requires an explicit parent domain; set it dynamically for deployments
@@ -76,6 +107,7 @@ export default function Home() {
             const data = await res.json();
             setIsStreaming(data.active);
             setStats(data.stats || null);
+            setViewers(typeof data.viewers === 'number' ? data.viewers : null);
             if (data.logs) setLogs(data.logs);
 
             if (data.active && data.info) {
@@ -91,6 +123,33 @@ export default function Home() {
         }
     };
 
+    const updateStreamInfo = async () => {
+        if (!kickUsername || !kickTitle || !kickToken) {
+            setStatusMessage('Kick Username, Title and Token required.');
+            return;
+        }
+        localStorage.setItem('kickToken', kickToken);
+        setIsUpdatingInfo(true);
+        try {
+            const res = await fetch('/api/kick', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: kickUsername, title: kickTitle, token: kickToken }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setStatusMessage('Stream title updated!');
+                setTimeout(() => setStatusMessage(''), 3000);
+            } else {
+                setStatusMessage(`Update Error: ${data.error || 'Unknown'}`);
+            }
+        } catch (e) {
+            setStatusMessage('Failed to update info.');
+        } finally {
+            setIsUpdatingInfo(false);
+        }
+    };
+
     const startStream = async () => {
         if (!twitchUsername || !kickStreamKey) {
             setStatusMessage('Please fill in all fields.');
@@ -99,6 +158,8 @@ export default function Home() {
         localStorage.setItem('twitchUsername', twitchUsername);
         localStorage.setItem('kickUsername', kickUsername);
         localStorage.setItem('kickStreamKey', kickStreamKey);
+        localStorage.setItem('kickRtmpUrl', kickRtmpUrl);
+        localStorage.setItem('kickChatroomId', kickChatroomId);
 
         setIsLoading(true);
         setStatusMessage('Initializing...');
@@ -108,7 +169,7 @@ export default function Home() {
             const res = await fetch('/api/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ twitchUsername, kickStreamKey, quality }),
+                body: JSON.stringify({ twitchUsername, kickStreamKey, quality, kickRtmpUrl }),
             });
 
             const data = await res.json();
@@ -116,6 +177,7 @@ export default function Home() {
             if (res.ok) {
                 setIsStreaming(true);
                 setStatusMessage('Stream started');
+                window.electronAPI?.setStreamStatus(true);
                 checkStatus();
             } else {
                 setStatusMessage(`Error: ${data.error}`);
@@ -136,6 +198,7 @@ export default function Home() {
                 setStatusMessage('Stream stopped');
                 setStreamStartTime(null);
                 setStats(null);
+                window.electronAPI?.setStreamStatus(false);
             }
         } catch (e) {
             setStatusMessage('Failed to stop stream.');
@@ -173,6 +236,12 @@ export default function Home() {
                                 <Cpu size={14} className="text-orange-500" />
                                 <span>{stats.speed}</span>
                             </div>
+                            {viewers !== null && (
+                                <div className="flex items-center gap-2 text-xs font-mono text-[#a1a1aa]">
+                                    <Users size={14} className="text-purple-500" />
+                                    <span>{viewers}</span>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -227,6 +296,34 @@ export default function Home() {
                                 />
                             </div>
 
+                             <div className="input-group">
+                                <label className="input-label flex items-center gap-2">
+                                    <MessageSquare size={12} /> Kick Chatroom ID (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="If auto-detect fails (e.g. 123456)"
+                                    value={kickChatroomId}
+                                    onChange={(e) => setKickChatroomId(e.target.value)}
+                                    className="std-input text-xs"
+                                    disabled={isStreaming}
+                                />
+                            </div>
+
+                            <div className="input-group">
+                                <label className="input-label flex items-center gap-2">
+                                    <Wifi size={12} /> RTMP Server
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="Auto-detect (Leave Empty)"
+                                    value={kickRtmpUrl}
+                                    onChange={(e) => setKickRtmpUrl(e.target.value)}
+                                    className="std-input text-xs"
+                                    disabled={isStreaming}
+                                />
+                            </div>
+
                             <div className="input-group">
                                 <label className="input-label flex items-center gap-2">
                                     <Key size={12} /> Stream Key
@@ -262,6 +359,38 @@ export default function Home() {
                                         <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Stream Info Update Section */}
+                            <div className="pt-4 border-t border-[#27272a] space-y-4">
+                                <h3 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-wider">Update Kick Info</h3>
+                                <div className="input-group">
+                                    <label className="input-label">New Stream Title</label>
+                                    <input
+                                        type="text"
+                                        placeholder="My Awesome Stream"
+                                        value={kickTitle}
+                                        onChange={(e) => setKickTitle(e.target.value)}
+                                        className="std-input"
+                                    />
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label">Kick Auth Token (Bearer)</label>
+                                    <input
+                                        type="password"
+                                        placeholder="Bearer ..."
+                                        value={kickToken}
+                                        onChange={(e) => setKickToken(e.target.value)}
+                                        className="std-input font-mono text-xs"
+                                    />
+                                </div>
+                                <button
+                                    onClick={updateStreamInfo}
+                                    disabled={isUpdatingInfo}
+                                    className="btn w-full bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-[#ededed] text-xs h-8"
+                                >
+                                    {isUpdatingInfo ? 'Updating...' : 'Update Title'}
+                                </button>
                             </div>
                         </div>
 
@@ -303,13 +432,17 @@ export default function Home() {
                         <div className="h-14 border-b border-[#27272a] flex items-center px-4 justify-between bg-[#09090b]/40">
                             <div className="flex gap-1 bg-[#18181b] p-1 rounded-lg border border-[#27272a]">
                                 <button onClick={() => setActiveTab('twitch')} className={`tab-btn ${activeTab === 'twitch' ? 'active' : ''}`}>
-                                    Twitch Chat
+                                    Twitch
                                 </button>
                                 <button onClick={() => setActiveTab('kick')} className={`tab-btn ${activeTab === 'kick' ? 'active' : ''}`}>
-                                    Kick Chat
+                                    Kick
+                                </button>
+                                <button onClick={() => setActiveTab('unified')} className={`tab-btn flex items-center gap-2 ${activeTab === 'unified' ? 'active' : ''}`}>
+                                    <Layers size={12} />
+                                    Unified
                                 </button>
                                 <button onClick={() => setActiveTab('split')} className={`tab-btn ${activeTab === 'split' ? 'active' : ''}`}>
-                                    Split View
+                                    Split
                                 </button>
                                 <button onClick={() => setActiveTab('preview')} className={`tab-btn ${activeTab === 'preview' ? 'active' : ''}`}>
                                     Monitor
@@ -428,6 +561,17 @@ export default function Home() {
                                         <div className="text-[#52525b]">Waiting for stream logs...</div>
                                     )}
                                     <div ref={logsEndRef} />
+                                </div>
+                            )}
+
+                            {/* Unified Chat View */}
+                            {activeTab === 'unified' && (
+                                <div className="w-full h-full z-20">
+                                    <UnifiedChat 
+                                        twitchUsername={twitchUsername}
+                                        kickUsername={kickUsername}
+                                        kickChatroomId={kickChatroomId}
+                                    />
                                 </div>
                             )}
                         </div>

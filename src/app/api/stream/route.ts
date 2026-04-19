@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn, ChildProcess } from 'child_process';
-import { getTwitchStreamM3u8 } from '@/lib/twitch';
+import { getTwitchStreamM3u8, getTwitchStreamViewers } from '@/lib/twitch';
 
 // Define the shape of our state
 interface StreamState {
@@ -37,7 +37,7 @@ const ffmpegBinary = process.env.FFMPEG_PATH || 'ffmpeg';
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { twitchUsername, kickStreamKey, quality } = body;
+        const { twitchUsername, kickStreamKey, quality, kickRtmpUrl } = body;
 
         if (!twitchUsername || !kickStreamKey) {
             return NextResponse.json({ error: 'Missing twitchUsername or kickStreamKey' }, { status: 400 });
@@ -60,16 +60,49 @@ export async function POST(req: NextRequest) {
         console.log(`Starting stream for ${twitchUsername} to Kick...`);
 
         // 2. Start FFmpeg
-        const kickRtmpUrl = `rtmps://fa723fc1b171.global-contribute.live-video.net/app/${kickStreamKey}`;
+        // Use provided RTMP server or fallback to the default one
+        let rtmpServer = kickRtmpUrl;
+
+        if (!rtmpServer) {
+            // Auto-detect based on stream key prefix
+            if (kickStreamKey.startsWith('sk_us-west-2')) {
+                rtmpServer = 'rtmps://sk_us-west-2.kick.com/app';
+            } else if (kickStreamKey.startsWith('sk_us-east-1')) {
+                rtmpServer = 'rtmps://sk_us-east-1.kick.com/app';
+            } else if (kickStreamKey.startsWith('sk_eu-west-1')) {
+                 rtmpServer = 'rtmps://sk_eu-west-1.kick.com/app';
+            } else {
+                // Final fallback
+                rtmpServer = 'rtmps://fa723fc1b171.global-contribute.live-video.net/app';
+            }
+            streamState.logs.push(`Auto-detected RTMP Server: ${rtmpServer}`);
+        }
+        
+        // Robustness check: Ensure '/app' suffix exists for Kick URLs if missing
+        if (rtmpServer.includes('live-video.net') && !rtmpServer.endsWith('/app') && !rtmpServer.endsWith('/app/')) {
+            rtmpServer = rtmpServer.replace(/\/$/, '') + '/app';
+        }
+
+        const fullKickRtmpUrl = `${rtmpServer.endsWith('/') ? rtmpServer : rtmpServer + '/'}${kickStreamKey}`;
+
+        // Log the target server (obscuring key) for debugging
+        const obscuredUrl = fullKickRtmpUrl.replace(kickStreamKey, '***SK***');
+        streamState.logs.push(`Target RTMP: ${obscuredUrl}`);
+        console.log(`Target RTMP: ${obscuredUrl}`);
 
         const ffmpegArgs = [
-            '-re',
+            '-headers', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            '-rw_timeout', '20000000', // 20s timeout for TCP reads
+            '-reconnect', '1',
+            '-reconnect_streamed', '1',
+            '-reconnect_delay_max', '5',
             '-i', m3u8Url,
             '-c', 'copy',
+            '-bsf:a', 'aac_adtstoasc',
             '-f', 'flv',
-            '-bufsize', '6000k', // Increase buffer
-            '-max_muxing_queue_size', '1024',
-            kickRtmpUrl
+            '-flvflags', 'no_duration_filesize',
+            '-avoid_negative_ts', 'make_zero',
+            fullKickRtmpUrl
         ];
 
         const ffmpegProcess = spawn(ffmpegBinary, ffmpegArgs);
@@ -143,10 +176,16 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+    let viewers = null;
+    if (streamState.info?.twitchUser) {
+        viewers = await getTwitchStreamViewers(streamState.info.twitchUser);
+    }
+
     return NextResponse.json({
         active: !!streamState.process,
         info: streamState.info,
         stats: streamState.stats,
-        logs: streamState.logs
+        logs: streamState.logs,
+        viewers
     });
 }

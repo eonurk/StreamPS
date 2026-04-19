@@ -28,10 +28,21 @@
     "target": "dmg",
     "identity": null
   },
+  "dmg": {
+    "title": "${productName}",
+    "window": { "width": 540, "height": 380 }
+  },
   "win": {
     "target": "nsis"
   },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "runAfterFinish": true
+  },
   "linux": {
-    "target": "AppImage"
+    "target": "AppImage",
+    "category": "AudioVideo"
   }
 }
