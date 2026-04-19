@@ -4,7 +4,7 @@
 
 <h1>StreamPS</h1>
 
-<p>Relay your Twitch stream to Kick in real time — no encoding, no quality loss.</p>
+<p>Relay your Twitch stream to Kick in real time — no re-encoding, no added quality loss.</p>
 
 [![Download](https://img.shields.io/github/downloads/eonurk/StreamPS/total?style=flat-square&label=Downloads)](https://github.com/eonurk/StreamPS/releases/latest)
 [![Release](https://img.shields.io/github/v/release/eonurk/StreamPS?style=flat-square)](https://github.com/eonurk/StreamPS/releases/latest)
@@ -17,13 +17,13 @@
 
 ## What is StreamPS?
 
-PS5, Xbox, and console players can stream to Twitch natively — but not to Kick. StreamPS bridges that gap by relaying your live Twitch stream to Kick automatically, with zero re-encoding and no quality loss.
+PS5, Xbox, and console players can stream to Twitch natively — but not to Kick. StreamPS bridges that gap by pulling your live Twitch HLS stream and relaying it to Kick via RTMP, with no re-encoding on our end.
 
 **One click. Both platforms. Same stream.**
 
 ## Features
 
-- **Zero re-encoding** — streams are copied bit-for-bit, so quality and CPU load are unchanged
+- **No re-encoding** — the stream is copied bit-for-bit from Twitch's output, so StreamPS itself adds no quality loss and uses minimal CPU
 - **Auto RTMP detection** — detects the correct Kick server from your stream key prefix (US East, US West, EU)
 - **Live stats** — real-time FPS, bitrate, and encoding speed in the header
 - **Unified chat** — Twitch and Kick chat merged into a single feed, side-by-side, or separate tabs
@@ -40,13 +40,15 @@ PS5, Xbox, and console players can stream to Twitch natively — but not to Kick
 | Windows | [StreamPS-Setup-0.1.0.exe](https://github.com/eonurk/StreamPS/releases/latest/download/StreamPS-Setup-0.1.0.exe) |
 | Linux | [StreamPS-0.1.0.AppImage](https://github.com/eonurk/StreamPS/releases/latest/download/StreamPS-0.1.0.AppImage) |
 
-> **macOS note:** The app is unsigned. On first launch right-click → Open → Open to bypass Gatekeeper.
+> **macOS:** The app is unsigned — on first launch right-click → Open → Open to bypass Gatekeeper. The bundled FFmpeg binary is x86_64 and runs via Rosetta 2 on Apple Silicon.
 
 ## Requirements
 
-- **FFmpeg** must be on your system PATH (or bundled in the app for packaged builds)
 - A live Twitch stream from your PS5, Xbox, or OBS
 - A Kick stream key (Settings → Stream Key on kick.com)
+- **FFmpeg** is bundled inside the downloaded app — no separate install needed
+
+> Running from source? You'll need FFmpeg on your system PATH.
 
 ## Quick Start
 
