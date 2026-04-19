@@ -7,6 +7,7 @@ declare global {
         electronAPI?: {
             setStreamStatus: (active: boolean) => void;
             openExternal: (url: string) => void;
+            openKickWindow: (username: string) => void;
             platform: string;
             isElectron: boolean;
         };
@@ -503,12 +504,27 @@ export default function Home() {
                             {(activeTab === 'kick' || activeTab === 'split') && (
                                 <div className={`h-full relative z-10 ${activeTab === 'split' ? 'w-1/2' : 'w-full'}`}>
                                     {kickUsername ? (
-                                        <iframe
-                                            src={`https://kick.com/${kickUsername}/chatroom`}
-                                            height="100%"
-                                            width="100%"
-                                            className="w-full h-full"
-                                        />
+                                        <>
+                                            <iframe
+                                                src={`https://kick.com/${kickUsername}/chatroom`}
+                                                height="100%"
+                                                width="100%"
+                                                className="w-full h-full"
+                                            />
+                                            {/* Iframes block Google login and CSRF-protected forms.
+                                                Offer a real window for sending chat messages. */}
+                                            {typeof window !== 'undefined' && window.electronAPI?.isElectron && (
+                                                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-3 bg-[#18181b]/90 backdrop-blur border border-[#27272a] rounded-lg px-3 py-2 text-xs text-[#a1a1aa]">
+                                                    <span>Sign-in &amp; chat requires a full window</span>
+                                                    <button
+                                                        onClick={() => window.electronAPI?.openKickWindow(kickUsername)}
+                                                        className="btn bg-[#27272a] hover:bg-[#3f3f46] text-[#ededed] text-xs h-7 px-3 shrink-0"
+                                                    >
+                                                        Open Kick Window
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
                                     ) : (
                                         <div className="h-full flex flex-col items-center justify-center text-[#52525b] gap-3">
                                             <div className="w-12 h-12 rounded-xl bg-[#18181b] border border-[#27272a] flex items-center justify-center">

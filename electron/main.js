@@ -301,6 +301,26 @@ ipcMain.on('open-external', (_, url) => {
     }
 });
 
+ipcMain.on('open-kick-window', (_, username) => {
+    const kickWin = new BrowserWindow({
+        width: 440,
+        height: 720,
+        minWidth: 360,
+        minHeight: 500,
+        title: `Kick — ${username}`,
+        backgroundColor: '#0f0f0f',
+        webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+        },
+        parent: mainWindow || undefined,
+    });
+
+    kickWin.setMenuBarVisibility(false);
+    if (process.platform !== 'darwin') kickWin.removeMenu();
+    kickWin.loadURL(`https://kick.com/${username}`);
+});
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.on('ready', async () => {

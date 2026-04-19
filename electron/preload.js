@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
     setStreamStatus: (active) => ipcRenderer.send('set-stream-status', active),
     openExternal: (url) => ipcRenderer.send('open-external', url),
+    openKickWindow: (username) => ipcRenderer.send('open-kick-window', username),
     platform: process.platform,
     isElectron: true,
 });
