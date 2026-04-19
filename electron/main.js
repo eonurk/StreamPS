@@ -47,11 +47,17 @@ const findServerScript = () => {
 
 const getBundledFfmpegPath = () => {
     const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux';
+    const arch = process.arch; // 'arm64' or 'x64'
     const exe = platform === 'win' ? 'ffmpeg.exe' : 'ffmpeg';
-    const candidate = isDev
-        ? path.join(__dirname, '..', 'resources', 'ffmpeg', platform, exe)
-        : path.join(process.resourcesPath, 'ffmpeg', platform, exe);
-    return fs.existsSync(candidate) ? candidate : null;
+    const base = isDev ? path.join(__dirname, '..', 'resources', 'ffmpeg') : path.join(process.resourcesPath, 'ffmpeg');
+
+    // Prefer architecture-specific binary (e.g. mac-arm64/ffmpeg) for native performance
+    const archSpecific = path.join(base, `${platform}-${arch}`, exe);
+    if (fs.existsSync(archSpecific)) return archSpecific;
+
+    // Fall back to generic platform binary (may run under Rosetta on Apple Silicon)
+    const generic = path.join(base, platform, exe);
+    return fs.existsSync(generic) ? generic : null;
 };
 
 const waitForServer = (url, retries = 50, interval = 200) =>

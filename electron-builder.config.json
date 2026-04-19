@@ -12,6 +12,10 @@
       "to": "ffmpeg/${os}"
     },
     {
+      "from": "resources/ffmpeg/${os}-${arch}",
+      "to": "ffmpeg/${os}-${arch}"
+    },
+    {
       "from": ".next/standalone",
       "to": "app-server"
     },

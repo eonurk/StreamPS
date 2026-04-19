@@ -13,8 +13,9 @@ declare global {
         };
     }
 }
-import { Twitch, Key, Activity, Clock, Play, Square, AlertCircle, Monitor, Radio, Zap, LayoutTemplate, MessageSquare, Cast, Terminal, Wifi, Cpu, Users, Layers } from 'lucide-react';
+import { Twitch, Key, Activity, Clock, Play, Square, AlertCircle, Monitor, Radio, Zap, LayoutTemplate, MessageSquare, Cast, Terminal, Wifi, Cpu, Users, Layers, RefreshCw } from 'lucide-react';
 import UnifiedChat from '@/components/UnifiedChat';
+import type { LogEntry } from '@/app/api/stream/route';
 
 export default function Home() {
     const [twitchUsername, setTwitchUsername] = useState('');
@@ -25,6 +26,7 @@ export default function Home() {
     const [kickTitle, setKickTitle] = useState('');
     const [kickToken, setKickToken] = useState('');
     const [isStreaming, setIsStreaming] = useState(false);
+    const [isReconnecting, setIsReconnecting] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isUpdatingInfo, setIsUpdatingInfo] = useState(false);
@@ -35,8 +37,9 @@ export default function Home() {
     const [parentHost, setParentHost] = useState('localhost');
     
     const [stats, setStats] = useState<{ fps: string; bitrate: string; speed: string } | null>(null);
-    const [viewers, setViewers] = useState<number | null>(null);
-    const [logs, setLogs] = useState<string[]>([]);
+    const [twitchViewers, setTwitchViewers] = useState<number | null>(null);
+    const [kickViewers, setKickViewers] = useState<number | null>(null);
+    const [logs, setLogs] = useState<LogEntry[]>([]);
     const logsEndRef = useRef<HTMLDivElement>(null);
 
     // Load saved values
@@ -107,13 +110,18 @@ export default function Home() {
             const res = await fetch('/api/stream');
             const data = await res.json();
             setIsStreaming(data.active);
+            setIsReconnecting(data.isReconnecting ?? false);
             setStats(data.stats || null);
-            setViewers(typeof data.viewers === 'number' ? data.viewers : null);
+            setTwitchViewers(typeof data.twitchViewers === 'number' ? data.twitchViewers : null);
+            setKickViewers(typeof data.kickViewers === 'number' ? data.kickViewers : null);
             if (data.logs) setLogs(data.logs);
 
             if (data.active && data.info) {
                 setStatusMessage(`Live: ${data.info.twitchUser}`);
                 if (!streamStartTime) setStreamStartTime(data.info.startTime);
+            } else if (data.isReconnecting) {
+                setStatusMessage(`Reconnecting... (${data.retryCount}/5)`);
+                setStreamStartTime(null);
             } else if (!data.active && isStreaming) {
                 setStatusMessage('Stream offline');
                 setStreamStartTime(null);
@@ -170,7 +178,7 @@ export default function Home() {
             const res = await fetch('/api/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ twitchUsername, kickStreamKey, quality, kickRtmpUrl }),
+                body: JSON.stringify({ twitchUsername, kickUsername, kickStreamKey, quality, kickRtmpUrl }),
             });
 
             const data = await res.json();
@@ -237,18 +245,29 @@ export default function Home() {
                                 <Cpu size={14} className="text-orange-500" />
                                 <span>{stats.speed}</span>
                             </div>
-                            {viewers !== null && (
+                            {twitchViewers !== null && (
                                 <div className="flex items-center gap-2 text-xs font-mono text-[#a1a1aa]">
                                     <Users size={14} className="text-purple-500" />
-                                    <span>{viewers}</span>
+                                    <span>{twitchViewers}</span>
+                                </div>
+                            )}
+                            {kickViewers !== null && (
+                                <div className="flex items-center gap-2 text-xs font-mono text-[#a1a1aa]">
+                                    <Users size={14} className="text-green-500" />
+                                    <span>{kickViewers}</span>
                                 </div>
                             )}
                         </div>
                     )}
 
                     <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-[#18181b] border border-[#27272a]">
-                        <div className={`status-dot ${isStreaming ? 'online' : 'offline'}`} />
-                        <span className="text-xs font-medium text-[#ededed]">{isStreaming ? 'Live Relay' : 'Standby'}</span>
+                        {isReconnecting
+                            ? <RefreshCw size={8} className="text-yellow-500 animate-spin" />
+                            : <div className={`status-dot ${isStreaming ? 'online' : 'offline'}`} />
+                        }
+                        <span className="text-xs font-medium text-[#ededed]">
+                            {isStreaming ? 'Live Relay' : isReconnecting ? 'Reconnecting' : 'Standby'}
+                        </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs font-mono text-[#a1a1aa]">
                         <Clock size={14} />
@@ -569,8 +588,8 @@ export default function Home() {
                                     {logs.length > 0 ? (
                                         logs.map((log, i) => (
                                             <div key={i} className="whitespace-pre-wrap break-all mb-1 font-medium opacity-90">
-                                                <span className="text-[#52525b] mr-2">[{new Date().toLocaleTimeString()}]</span>
-                                                {log}
+                                                <span className="text-[#52525b] mr-2">[{new Date(log.time).toLocaleTimeString()}]</span>
+                                                {log.text}
                                             </div>
                                         ))
                                     ) : (
