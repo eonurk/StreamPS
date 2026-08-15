@@ -56,13 +56,7 @@ export default function Home() {
         if (savedKey) setKickStreamKey(savedKey);
         if (savedChatroomId) setKickChatroomId(savedChatroomId);
         if (savedToken) setKickToken(savedToken);
-        
-        // Fix: specific check to clear the old hardcoded default if it was saved
-        // This allows the backend auto-detection to take over
-        const oldDefault = 'rtmps://fa723fc1b171.global-contribute.live-video.net/app';
-        if (savedRtmpUrl && savedRtmpUrl !== oldDefault) {
-            setKickRtmpUrl(savedRtmpUrl);
-        }
+        if (savedRtmpUrl) setKickRtmpUrl(savedRtmpUrl);
     }, []);
 
     // Twitch embed requires an explicit parent domain; set it dynamically for deployments
@@ -336,7 +330,7 @@ export default function Home() {
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="Auto-detect (Leave Empty)"
+                                    placeholder="Paste from Kick dashboard (optional)"
                                     value={kickRtmpUrl}
                                     onChange={(e) => setKickRtmpUrl(e.target.value)}
                                     className="std-input text-xs"
