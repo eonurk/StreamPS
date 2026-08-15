@@ -13,7 +13,9 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en">
+        // The preload adds `electron` to <html> before React hydrates, which trips the
+        // attribute check. This only suppresses diffs on <html>, not the tree below it.
+        <html lang="en" suppressHydrationWarning>
             <body>{children}</body>
         </html>
     );
