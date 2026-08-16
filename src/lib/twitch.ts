@@ -31,7 +31,8 @@ export async function getTwitchStreamM3u8(channelName: string, quality: string =
         "Client-Id": "kimne78kx3ncx6brgo4mv6wki5h1ko", // Common public client ID
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(gqlQuery)
+      body: JSON.stringify(gqlQuery),
+      signal: AbortSignal.timeout(10000)
     });
 
     if (!tokenResponse.ok) {
@@ -71,7 +72,7 @@ export async function getTwitchStreamM3u8(channelName: string, quality: string =
     const m3u8Url = `https://usher.ttvnw.net/api/channel/hls/${channelName}.m3u8?${queryParams.toString()}`;
 
     // Check if the stream is actually live by fetching the m3u8
-    const m3u8Response = await fetch(m3u8Url);
+    const m3u8Response = await fetch(m3u8Url, { signal: AbortSignal.timeout(10000) });
     if (!m3u8Response.ok) {
       console.error("[Twitch] Failed to fetch m3u8. Status:", m3u8Response.status);
       console.error("[Twitch] Response:", await m3u8Response.text());
@@ -95,7 +96,10 @@ export async function getTwitchStreamM3u8(channelName: string, quality: string =
 
     // Quality Selection Logic
     if (quality === 'source') {
-      // Usually the first one, or explicitly look for VIDEO="chunked"
+      // Twitch tags the source rendition VIDEO="chunked"; fall back to the first
+      // entry only if that tag is missing, rather than trusting playlist order
+      const url = findQuality('VIDEO="chunked"');
+      if (url) return url;
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].startsWith('http')) return lines[i];
       }
@@ -162,7 +166,8 @@ export async function getTwitchStreamViewers(channelName: string): Promise<numbe
         "Client-Id": "kimne78kx3ncx6brgo4mv6wki5h1ko",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(gqlQuery)
+      body: JSON.stringify(gqlQuery),
+      signal: AbortSignal.timeout(8000)
     });
 
     if (!response.ok) return null;
