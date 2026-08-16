@@ -35,6 +35,7 @@ export default function Home() {
     const [activeTab, setActiveTab] = useState<'twitch' | 'kick' | 'split' | 'preview' | 'terminal' | 'unified'>('twitch');
     const [quality, setQuality] = useState('auto');
     const [parentHost, setParentHost] = useState('localhost');
+    const [isElectron, setIsElectron] = useState(false);
     
     const [stats, setStats] = useState<{ fps: string; bitrate: string; speed: string } | null>(null);
     const [twitchViewers, setTwitchViewers] = useState<number | null>(null);
@@ -70,6 +71,11 @@ export default function Home() {
         if (typeof window !== 'undefined' && window.location.hostname) {
             setParentHost(window.location.hostname);
         }
+    }, []);
+
+    // Check for Electron after mount — reading window during render breaks hydration
+    useEffect(() => {
+        setIsElectron(!!window.electronAPI?.isElectron);
     }, []);
 
     // Auto-scroll logs
@@ -532,7 +538,7 @@ export default function Home() {
                                             />
                                             {/* Iframes block Google login and CSRF-protected forms.
                                                 Offer a real window for sending chat messages. */}
-                                            {typeof window !== 'undefined' && window.electronAPI?.isElectron && (
+                                            {isElectron && (
                                                 <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-3 bg-[#18181b]/90 backdrop-blur border border-[#27272a] rounded-lg px-3 py-2 text-xs text-[#a1a1aa]">
                                                     <span>Sign-in &amp; chat requires a full window</span>
                                                     <button

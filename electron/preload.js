@@ -9,10 +9,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isElectron: true,
 });
 
-// Mark document so CSS can style for Electron context
-window.addEventListener('DOMContentLoaded', () => {
+// Mark document so CSS can style for Electron context.
+// <html> has suppressHydrationWarning in the root layout to cover these classes.
+const markDocument = () => {
     document.documentElement.classList.add('electron');
     if (process.platform === 'darwin') {
         document.documentElement.classList.add('electron-mac');
     }
-});
+};
+
+// documentElement is usually there already; if not, wait for the DOM
+if (document.documentElement) {
+    markDocument();
+} else {
+    window.addEventListener('DOMContentLoaded', markDocument);
+}
