@@ -7,6 +7,8 @@ export async function getKickStreamViewers(username: string): Promise<number | n
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'Accept': 'application/json',
       },
+      // Kick sits behind Cloudflare and can hang rather than fail
+      signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return null;
     const data = await response.json();

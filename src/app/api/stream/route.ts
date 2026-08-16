@@ -33,7 +33,10 @@ interface StreamState {
     startParams: StartParams | null;
 }
 
-const globalForStream = globalThis as unknown as { streamState: StreamState | undefined };
+const globalForStream = globalThis as unknown as {
+    streamState: StreamState | undefined;
+    streamShutdownHooked: boolean | undefined;
+};
 
 if (!globalForStream.streamState) {
     globalForStream.streamState = {
@@ -83,7 +86,7 @@ function resolveFfmpeg(): string {
 
 // Catch the setup mistakes that otherwise show up as a relay that says it's live
 // and never sends a frame
-async function preflight(rtmpServer: string, streamKey: string) {
+async function preflight(rtmpServer: string, streamKey: string, isReconnect = false) {
     let url: URL;
     try {
         url = new URL(rtmpServer);
@@ -108,6 +111,13 @@ async function preflight(rtmpServer: string, streamKey: string) {
         const { address } = await lookup(url.hostname);
         addLog(`Ingest host ${url.hostname} resolves to ${address}`);
     } catch {
+        // On a reconnect the host already resolved once, so a failure here is far
+        // more likely a transient resolver blip than a bad URL. Let FFmpeg try —
+        // blocking would spend a retry on a DNS hiccup.
+        if (isReconnect) {
+            addLog(`Warning: could not resolve ${url.hostname} right now, trying anyway.`);
+            return;
+        }
         throw new Error(
             `Ingest host "${url.hostname}" does not resolve. ` +
             'Paste the Stream URL from Kick → Creator Dashboard → Stream Key.'
@@ -115,7 +125,65 @@ async function preflight(rtmpServer: string, streamKey: string) {
     }
 }
 
-async function launchFFmpeg(params: StartParams): Promise<void> {
+// FFmpeg is a child of this server process, and Node does not take its children
+// down with it. Electron SIGTERMs the server on quit, so without this the relay
+// keeps pushing to Kick with no UI left to stop it.
+if (!globalForStream.streamShutdownHooked) {
+    globalForStream.streamShutdownHooked = true;
+
+    const killRelay = () => {
+        const proc = streamState.process;
+        streamState.process = null;
+        streamState.startParams = null;
+        if (proc) {
+            try { proc.kill('SIGKILL'); } catch { /* already gone */ }
+        }
+    };
+
+    // 'exit' only allows synchronous work, which kill() is
+    process.once('exit', killRelay);
+    for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+        process.once(signal, () => {
+            killRelay();
+            process.exit(0);
+        });
+    }
+}
+
+function giveUp(reason?: string) {
+    if (reason) addLog(reason);
+    streamState.info = null;
+    streamState.stats = null;
+    streamState.startParams = null;
+    streamState.retryCount = 0;
+}
+
+function scheduleRetry(saved: StartParams) {
+    if (streamState.retryCount >= MAX_RETRIES) {
+        giveUp('Max retries reached. Giving up.');
+        return;
+    }
+
+    streamState.retryCount++;
+    const attempt = streamState.retryCount;
+    addLog(`Relay lost. Reconnecting in ${RETRY_DELAY_MS / 1000}s... (attempt ${attempt}/${MAX_RETRIES})`);
+
+    setTimeout(async () => {
+        // Identity check, not just null: covers stop-then-start during the wait
+        if (streamState.startParams !== saved) return;
+        try {
+            addLog(`Reconnecting (attempt ${attempt}/${MAX_RETRIES})...`);
+            await launchFFmpeg(saved, true);
+        } catch (e: any) {
+            addLog(`Reconnect failed: ${e.message}`);
+            // No process was spawned, so no 'close' event will fire to drive the
+            // next attempt. Without this the relay sits in "reconnecting" forever.
+            scheduleRetry(saved);
+        }
+    }, RETRY_DELAY_MS);
+}
+
+async function launchFFmpeg(params: StartParams, isReconnect = false): Promise<void> {
     const { twitchUsername, kickUsername, kickStreamKey, quality, kickRtmpUrl: providedRtmpUrl } = params;
 
     const m3u8Url = await getTwitchStreamM3u8(twitchUsername, quality || 'auto');
@@ -136,7 +204,7 @@ async function launchFFmpeg(params: StartParams): Promise<void> {
         rtmpServer = rtmpServer.replace(/\/$/, '') + '/app';
     }
 
-    await preflight(rtmpServer, kickStreamKey);
+    await preflight(rtmpServer, kickStreamKey, isReconnect);
 
     const base = rtmpServer.endsWith('/') ? rtmpServer : rtmpServer + '/';
     const fullRtmpUrl = `${base}${kickStreamKey}`;
@@ -179,7 +247,7 @@ async function launchFFmpeg(params: StartParams): Promise<void> {
         streamState.retryCount = 0;
 
         addLog(err.code === 'ENOENT'
-            ? `FFmpeg not found at "${binary}". Put a static build in resources/ffmpeg/${platformDir}/ or install ffmpeg on PATH.`
+            ? `FFmpeg not found at "${binary}". Put a static build in resources/ffmpeg/${platformDir}-${process.arch}/ (or resources/ffmpeg/${platformDir}/) or install ffmpeg on PATH.`
             : `Could not start FFmpeg: ${err.message}`);
     });
 
@@ -217,30 +285,10 @@ async function launchFFmpeg(params: StartParams): Promise<void> {
 
         const saved = streamState.startParams;
 
-        if (code !== 0 && saved && streamState.retryCount < MAX_RETRIES) {
-            streamState.retryCount++;
-            const attempt = streamState.retryCount;
-            addLog(`Relay lost. Reconnecting in ${RETRY_DELAY_MS / 1000}s... (attempt ${attempt}/${MAX_RETRIES})`);
-
-            setTimeout(async () => {
-                if (!streamState.startParams) return; // user stopped
-                try {
-                    addLog(`Reconnecting (attempt ${attempt}/${MAX_RETRIES})...`);
-                    await launchFFmpeg(saved);
-                } catch (e: any) {
-                    addLog(`Reconnect failed: ${e.message}`);
-                    if (streamState.retryCount >= MAX_RETRIES) {
-                        addLog('Max retries reached. Giving up.');
-                        streamState.info = null;
-                        streamState.startParams = null;
-                        streamState.retryCount = 0;
-                    }
-                }
-            }, RETRY_DELAY_MS);
+        if (code !== 0 && saved) {
+            scheduleRetry(saved);
         } else {
-            streamState.info = null;
-            streamState.startParams = null;
-            streamState.retryCount = 0;
+            giveUp();
         }
     });
 
@@ -259,7 +307,10 @@ export async function POST(req: NextRequest) {
         if (!twitchUsername || !kickStreamKey) {
             return NextResponse.json({ error: 'Missing twitchUsername or kickStreamKey' }, { status: 400 });
         }
-        if (streamState.process) {
+        // startParams is set synchronously below, so it also guards the window
+        // where launchFFmpeg is awaiting the network (and covers reconnects,
+        // where there is no process but the relay is still ours)
+        if (streamState.process || streamState.startParams) {
             return NextResponse.json({ error: 'A stream is already active' }, { status: 409 });
         }
 
@@ -322,16 +373,23 @@ export async function DELETE() {
 export async function GET() {
     const now = Date.now();
 
-    // Twitch viewers: max once every 30s
+    // The client polls this every 2s, so viewer counts are refreshed in the
+    // background: awaiting them here stalls the whole status response, and
+    // stamping the time only after the await lets slow requests pile up.
     if (streamState.info?.twitchUser && now - streamState.lastTwitchViewerCheck > 30_000) {
-        streamState.twitchViewers = await getTwitchStreamViewers(streamState.info.twitchUser);
         streamState.lastTwitchViewerCheck = now;
+        const user = streamState.info.twitchUser;
+        void getTwitchStreamViewers(user).then((count) => {
+            if (streamState.info?.twitchUser === user) streamState.twitchViewers = count;
+        });
     }
 
-    // Kick viewers: max once every 60s
     if (streamState.info?.kickUser && now - streamState.lastKickViewerCheck > 60_000) {
-        streamState.kickViewers = await getKickStreamViewers(streamState.info.kickUser);
         streamState.lastKickViewerCheck = now;
+        const user = streamState.info.kickUser;
+        void getKickStreamViewers(user).then((count) => {
+            if (streamState.info?.kickUser === user) streamState.kickViewers = count;
+        });
     }
 
     return NextResponse.json({

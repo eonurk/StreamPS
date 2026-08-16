@@ -134,7 +134,9 @@ export default function UnifiedChat({ twitchUsername, kickUsername, kickChatroom
 
                 channel = pusher.subscribe(`chatrooms.${chatroomId}.v2`);
 
-                channel.bind('App\Events\ChatMessageEvent', (data: any) => {
+                // Backslashes must be escaped — 'App\Events\...' collapses to
+                // "AppEventsChatMessageEvent" and silently binds to nothing.
+                channel.bind('App\\Events\\ChatMessageEvent', (data: any) => {
                     addMessage({
                         id: data.id,
                         platform: 'kick',
