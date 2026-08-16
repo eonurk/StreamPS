@@ -1,6 +1,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn, ChildProcess } from 'child_process';
+import { existsSync } from 'fs';
+import { lookup } from 'dns/promises';
+import path from 'path';
 import { getTwitchStreamM3u8, getTwitchStreamViewers } from '@/lib/twitch';
 import { getKickStreamViewers } from '@/lib/kick';
 
@@ -49,13 +52,67 @@ if (!globalForStream.streamState) {
 
 const streamState = globalForStream.streamState!;
 export const runtime = 'nodejs';
-const ffmpegBinary = process.env.FFMPEG_PATH || 'ffmpeg';
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 5000;
+
+// Kick hands out a per-account ingest URL. This geo-routed endpoint is only the
+// fallback for when the user hasn't pasted theirs; it won't suit every account.
+const DEFAULT_KICK_INGEST = 'rtmps://fa723fc1b171.global-contribute.live-video.net:443/app';
+
+const platformDir = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux';
 
 function addLog(text: string) {
     streamState.logs.push({ time: Date.now(), text });
     if (streamState.logs.length > 200) streamState.logs.shift();
+}
+
+// Packaged builds get FFMPEG_PATH from Electron, but `next dev` runs as its own
+// process and never sees it, so look for the bundled binary here as well.
+function resolveFfmpeg(): string {
+    const fromEnv = process.env.FFMPEG_PATH;
+    if (fromEnv && existsSync(fromEnv)) return fromEnv;
+
+    const exe = platformDir === 'win' ? 'ffmpeg.exe' : 'ffmpeg';
+    const base = path.join(process.cwd(), 'resources', 'ffmpeg');
+    for (const dir of [`${platformDir}-${process.arch}`, platformDir]) {
+        const candidate = path.join(base, dir, exe);
+        if (existsSync(candidate)) return candidate;
+    }
+    return 'ffmpeg';
+}
+
+// Catch the setup mistakes that otherwise show up as a relay that says it's live
+// and never sends a frame
+async function preflight(rtmpServer: string, streamKey: string) {
+    let url: URL;
+    try {
+        url = new URL(rtmpServer);
+    } catch {
+        throw new Error(`RTMP server is not a valid URL: "${rtmpServer}"`);
+    }
+
+    if (url.protocol !== 'rtmp:' && url.protocol !== 'rtmps:') {
+        throw new Error(`RTMP server must start with rtmp:// or rtmps:// (got "${url.protocol}//")`);
+    }
+    if (/^rtmps?:/i.test(streamKey)) {
+        throw new Error('The stream key looks like a URL — check the two fields are not swapped.');
+    }
+    if (/\s/.test(streamKey)) {
+        throw new Error('Stream key contains a space or a line break. Re-copy it from the Kick dashboard.');
+    }
+    if (!streamKey.startsWith('sk_')) {
+        addLog(`Warning: Kick keys normally start with "sk_", this one starts with "${streamKey.slice(0, 6)}".`);
+    }
+
+    try {
+        const { address } = await lookup(url.hostname);
+        addLog(`Ingest host ${url.hostname} resolves to ${address}`);
+    } catch {
+        throw new Error(
+            `Ingest host "${url.hostname}" does not resolve. ` +
+            'Paste the Stream URL from Kick → Creator Dashboard → Stream Key.'
+        );
+    }
 }
 
 async function launchFFmpeg(params: StartParams): Promise<void> {
@@ -66,23 +123,20 @@ async function launchFFmpeg(params: StartParams): Promise<void> {
 
     addLog(`Source: ${m3u8Url}`);
 
-    let rtmpServer = providedRtmpUrl;
+    // The sk_<region> prefix belongs to the key, not to a hostname. Building one
+    // out of it gave rtmps://sk_us-west-2.kick.com, which has no DNS record.
+    let rtmpServer = (providedRtmpUrl || '').trim();
     if (!rtmpServer) {
-        if (kickStreamKey.startsWith('sk_us-west-2')) {
-            rtmpServer = 'rtmps://sk_us-west-2.kick.com/app';
-        } else if (kickStreamKey.startsWith('sk_us-east-1')) {
-            rtmpServer = 'rtmps://sk_us-east-1.kick.com/app';
-        } else if (kickStreamKey.startsWith('sk_eu-west-1')) {
-            rtmpServer = 'rtmps://sk_eu-west-1.kick.com/app';
-        } else {
-            rtmpServer = 'rtmps://fa723fc1b171.global-contribute.live-video.net/app';
-        }
-        addLog(`Auto-detected RTMP server: ${rtmpServer}`);
+        rtmpServer = DEFAULT_KICK_INGEST;
+        addLog(`No RTMP server set, falling back to ${rtmpServer}`);
+        addLog('If Kick refuses the connection, paste your own Stream URL from the Creator Dashboard.');
     }
 
     if (rtmpServer.includes('live-video.net') && !rtmpServer.endsWith('/app') && !rtmpServer.endsWith('/app/')) {
         rtmpServer = rtmpServer.replace(/\/$/, '') + '/app';
     }
+
+    await preflight(rtmpServer, kickStreamKey);
 
     const base = rtmpServer.endsWith('/') ? rtmpServer : rtmpServer + '/';
     const fullRtmpUrl = `${base}${kickStreamKey}`;
@@ -103,12 +157,31 @@ async function launchFFmpeg(params: StartParams): Promise<void> {
         fullRtmpUrl,
     ];
 
-    const proc = spawn(ffmpegBinary, ffmpegArgs);
+    const binary = resolveFfmpeg();
+    addLog(`FFmpeg: ${binary}`);
+    const proc = spawn(binary, ffmpegArgs);
 
     // Reset retry counter after 2 minutes of stable streaming
     const stabilityTimer = setTimeout(() => {
         if (streamState.process === proc) streamState.retryCount = 0;
     }, 120_000);
+
+    // Without this, a failed spawn leaves streamState.process set and the UI
+    // reports a live relay that never started
+    proc.on('error', (err: NodeJS.ErrnoException) => {
+        clearTimeout(stabilityTimer);
+        if (streamState.process !== proc) return;
+
+        streamState.process = null;
+        streamState.stats = null;
+        streamState.info = null;
+        streamState.startParams = null;
+        streamState.retryCount = 0;
+
+        addLog(err.code === 'ENOENT'
+            ? `FFmpeg not found at "${binary}". Put a static build in resources/ffmpeg/${platformDir}/ or install ffmpeg on PATH.`
+            : `Could not start FFmpeg: ${err.message}`);
+    });
 
     proc.stderr.on('data', (data) => {
         const message = data.toString().trim();
@@ -218,22 +291,30 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE() {
-    if (!streamState.process) {
+    const proc = streamState.process;
+    // Between retries there is no process, but the relay is still pending. Stop
+    // has to work then too, otherwise it keeps reconnecting until MAX_RETRIES.
+    const pendingRetry = !proc && !!streamState.startParams;
+
+    if (!proc && !pendingRetry) {
         return NextResponse.json({ error: 'No active stream found' }, { status: 404 });
     }
 
-    const proc = streamState.process;
-    // Clear state first so the close handler doesn't trigger auto-restart
+    // Clear state first: the close handler and the retry timer both check it
     streamState.process = null;
     streamState.info = null;
     streamState.stats = null;
     streamState.startParams = null;
     streamState.retryCount = 0;
 
-    // Graceful shutdown: SIGTERM, force-kill after 5s if still running
-    proc.kill('SIGTERM');
-    const forceKill = setTimeout(() => { try { proc.kill('SIGKILL'); } catch {} }, 5000);
-    proc.once('exit', () => clearTimeout(forceKill));
+    if (proc) {
+        // Graceful shutdown: SIGTERM, force-kill after 5s if still running
+        proc.kill('SIGTERM');
+        const forceKill = setTimeout(() => { try { proc.kill('SIGKILL'); } catch {} }, 5000);
+        proc.once('exit', () => clearTimeout(forceKill));
+    } else {
+        addLog('Reconnect cancelled.');
+    }
 
     return NextResponse.json({ success: true, message: 'Stream stopped' });
 }
